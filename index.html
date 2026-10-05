@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ Filtrador PROCV — Automação de planilhas</title>
+<meta name="description" content="Abra planilhas, filtre linhas, faça PROCV, ordene e exporte o resultado em Excel ou CSV.">
+<meta name="theme-color" content="#0f1419">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Filtrador PROCV">
+<script src="xlsx.full.min.js"></script>
+<!-- PWA:HEAD:START -->
+<script>
+// Registra o service worker e cuida do prompt de instalacao.
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (err) {
+      console.warn('[pwa] service worker nao registrado:', err);
+    });
+  });
+})();
+</script>
+<!-- PWA:HEAD:END -->
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2129;
+    --panel2: #212a34;
+    --border: #2e3a47;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #2f81f7;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+  header h1 span { color: var(--accent); }
+  .btn {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: .15s;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.15); }
+  .btn.green { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
+  .btn.red { background: transparent; border-color: var(--red); color: var(--red); }
+  .btn.small { padding: 4px 9px; font-size: 12px; }
+  /* PWA:CSS:START */
+  .btn.install { border-color: var(--accent); color: var(--accent); }
+  .btn.install:hover { background: var(--accent); color: #fff; }
+  @media (display-mode: standalone), (display-mode: window-controls-overlay) {
+    .btn.install { display: none !important; }
+  }
+  /* PWA:CSS:END */
+  main { display: flex; flex: 1; overflow: hidden; }
+  aside {
+    width: 360px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  aside .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+    padding: 10px 14px 4px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .scroll { overflow-y: auto; }
+  .scroll::-webkit-scrollbar { width: 8px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .file-item, .step, .proc {
+    margin: 4px 10px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .file-item { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .file-item:hover, .file-item.active { border-color: var(--accent); }
+  .file-item .icon { font-size: 15px; }
+  .file-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge {
+    font-size: 10px; background: var(--border); padding: 2px 6px; border-radius: 10px; color: var(--muted);
+    white-space: nowrap;
+  }
+  .cbtn { cursor: pointer; }
+  .cbtn:hover { color: var(--accent); border-color: var(--accent); }
+  .file-item .rm { color: var(--red); cursor: pointer; font-weight: bold; padding: 0 4px; }
+  .file-item .rm:hover { filter: brightness(1.4); }
+  .proc { display: flex; align-items: center; gap: 8px; }
+  .proc .nm { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proc .nm:hover { color: var(--accent); }
+  .proc .meta { font-size: 10px; color: var(--muted); }
+  .proc .act { display: flex; gap: 3px; }
+  .proc .act button {
+    background: var(--border); border: none; color: var(--text); cursor: pointer;
+    width: 20px; height: 20px; border-radius: 4px; font-size: 11px;
+  }
+  .proc .act button:hover { background: var(--accent); }
+  .step { position: relative; }
+  .step .step-head { display: flex; align-items: center; gap: 8px; }
+  .step .step-num {
+    background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+    width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .step .step-type { font-weight: 600; font-size: 12px; flex: 1; }
+  .step .step-desc { color: var(--muted); font-size: 11px; margin-top: 5px; line-height: 1.4; word-break: break-word; }
+  .step .actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: 0; transition: .15s; }
+  .step:hover .actions { opacity: 1; }
+  .step .actions button {
+    background: var(--border); border: none; color: var(--text); cursor: pointer;
+    width: 20px; height: 20px; border-radius: 4px; font-size: 11px;
+  }
+  .step .actions button:hover { background: var(--accent); }
+  .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .toolbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .toolbar .info { font-size: 13px; color: var(--muted); flex: 1; }
+  .toolbar .info b { color: var(--text); }
+  .table-wrap { flex: 1; overflow: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th {
+    background: var(--panel2);
+    position: sticky; top: 0; z-index: 2;
+    padding: 9px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+    color: var(--accent);
+  }
+  td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    max-width: 380px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  tr:hover td { background: rgba(47,129,247,.06); }
+  .empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--muted); gap: 12px; padding: 40px; text-align: center;
+  }
+  .empty .big { font-size: 48px; }
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.65);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: 720px;
+    max-width: 94vw;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .modal-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-head h2 { font-size: 15px; }
+  .modal-head .close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+  .modal-head .close:hover { color: var(--red); }
+  .modal-body { padding: 16px 18px; overflow-y: auto; }
+  .modal-foot {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+  .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .type-card {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: .15s;
+  }
+  .type-card:hover { border-color: var(--accent); }
+  .type-card.selected { border-color: var(--accent); background: rgba(47,129,247,.12); }
+  .type-card .t { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .type-card .d { font-size: 11px; color: var(--muted); line-height: 1.35; }
+  .xls-ico { display: inline-block; vertical-align: -2px; }
+  .form-row { display: flex; gap: 10px; margin-bottom: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 130px; }
+  .form-group label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  select, input[type=text], input[type=number] {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--panel2); border: 1px solid var(--accent);
+    color: var(--text); padding: 12px 18px; border-radius: 8px;
+    font-size: 13px; z-index: 200; display: none;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4); max-width: 420px;
+  }
+  .toast.show { display: block; animation: slideUp .25s ease; }
+  .toast.error { border-color: var(--red); }
+  @keyframes slideUp { from { transform: translateY(15px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .cols-list { max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--panel2); }
+  .cols-list label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; cursor: pointer; }
+  .pipeline-empty { color: var(--muted); font-size: 12px; padding: 8px 14px; font-style: italic; }
+  .checkline { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; padding: 4px 0; }
+  .checkline input { width: auto; }
+  .frow {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--panel2);
+    align-items: flex-end;
+    margin-bottom: 8px;
+  }
+  .frow .rm-cond { flex: 0 0 38px; }
+  .frow .rm-cond button { width: 100%; }
+  .btn-add-cond {
+    background: none; border: 1px dashed var(--border); color: var(--accent);
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-bottom: 8px;
+  }
+  .btn-add-cond:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Filtrador <span>PROCV</span></h1>
+  <button class="btn" onclick="document.getElementById('fileInput').click()">📂 Abrir planilhas</button>
+  <button class="btn primary" onclick="openStepModal()">➕ Novo passo</button>
+  <button class="btn green" onclick="runPipeline()">▶ Executar</button>
+  <button class="btn" onclick="openSaveModal()">💾 Criar processo</button>
+  <button class="btn" onclick="document.getElementById('loadProcess').click()">↩ Carregar .json</button>
+  <button class="btn" onclick="exportResult('xlsx')">⬇ Excel</button>
+  <button class="btn" onclick="exportResult('csv')">⬇ CSV</button>
+  <button class="btn" onclick="openStats()">📊 Estatísticas</button>
+  <!-- PWA:BODY:START -->
+  <button class="btn install" id="btnInstall" style="display:none" onclick="installApp()">⬇ Instalar app</button>
+  <!-- PWA:BODY:END -->
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple style="display:none">
+  <input type="file" id="loadProcess" accept=".json" style="display:none">
+</header>
+
+<main>
+  <aside>
+    <div class="section-title"><span>📄 Planilhas abertas</span><span class="badge" id="sheetCount">0</span></div>
+    <div class="scroll" id="fileList" style="max-height:36%">
+      <div class="pipeline-empty">Nenhuma planilha aberta ainda.</div>
+    </div>
+
+    <div class="section-title"><span>💾 Meus processos</span><button class="btn small" onclick="openSaveModal()" title="Criar novo processo">＋</button></div>
+    <div class="scroll" id="processList" style="max-height:26%">
+      <div class="pipeline-empty">Nenhum processo salvo ainda.</div>
+    </div>
+
+    <div class="section-title">🧩 Processo de filtragem</div>
+    <div class="scroll" id="stepList">
+      <div class="pipeline-empty">Clique em "Novo passo" para criar seu processo.</div>
+    </div>
+    <div style="padding:10px; border-top:1px solid var(--border); display:flex; gap:6px; flex-shrink:0;">
+      <button class="btn small" onclick="clearPipeline()" style="flex:1">🗑 Limpar</button>
+      <button class="btn small" onclick="runPipeline()" style="flex:1">▶ Executar</button>
+    </div>
+  </aside>
+
+  <div class="content">
+    <div class="toolbar">
+      <span class="info" id="statusInfo">Aguardando dados…</span>
+      <input type="text" id="quickFilter" placeholder="🔎 Filtro rápido no resultado…" style="width:250px" oninput="renderResult()">
+    </div>
+    <div class="table-wrap" id="tableWrap">
+      <div class="empty">
+        <div class="big">📊</div>
+        <div>Abra planilhas, monte os passos do processo e clique em <b>Executar</b>.</div>
+        <div style="font-size:12px; max-width:560px; line-height:1.6">
+          Sequência de ações que você mesmo cria:<br>
+          <b>Filtrar</b> (condições E/OU, comparando com valor ou com outra coluna) · <b>PROCV</b> (exato ou aproximado) ·
+          <b>Ordenar</b> · <b>Remover duplicados</b> · <b>Escolher colunas</b> · <b>Coluna calculada</b> · <b>Juntar abas</b>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-bg" id="stepModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Novo passo do processo</h2>
+      <button class="close" onclick="closeModal('stepModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="type-grid" id="typeGrid"></div>
+      <div id="stepForm"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('stepModal')">Cancelar</button>
+      <button class="btn primary" onclick="addStep()">Adicionar passo</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="saveModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>💾 Criar / gerenciar processos</h2>
+      <button class="close" onclick="closeModal('saveModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nome do processo</label>
+        <input type="text" id="save_name" placeholder="ex.: Faturamento SP com cidade">
+      </div>
+      <button class="btn primary" style="margin-top:10px;width:100%" onclick="saveNamedProcess()">Salvar como processo</button>
+      <div class="section-title" style="padding:18px 0 6px;">Processos salvos neste navegador</div>
+      <div id="saveList"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('saveModal')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="statsModal">
+  <div class="modal" style="width:860px">
+    <div class="modal-head">
+      <h2>📊 Estatísticas do resultado</h2>
+      <button class="close" onclick="closeModal('statsModal')">✕</button>
+    </div>
+    <div class="modal-body" id="statsBody"></div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('statsModal')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY_PROCS = 'filtrador_procv.processos';
+const state = {
+  sheets: [],
+  steps: [],
+  baseSheetId: null,
+  result: null,
+  resultCols: [],
+  selectedType: 'filter',
+  editConds: [],
+  editLogic: 'E'
+};
+
+const STEP_TYPES = {
+  filter: { icon: '🔍', title: 'Filtrar linhas', desc: 'Mantém linhas por condições (E/OU), com valor fixo ou comparando colunas' },
+procv:  { icon: '<svg class="xls-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M5 2.5h7.6L19.6 9.5V21a.8.8 0 0 1-.8.8H5a.8.8 0 0 1-.8-.8V3.3a.8.8 0 0 1 .8-.8z" fill="#2F81F7"/><path d="M12.6 2.5 19.6 9.5h-6.2a.8.8 0 0 1-.8-.8z" fill="#fff" opacity=".55"/><path d="M9.3 8.3 14.5 13.5M14.5 8.3 9.3 13.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><path d="M7.4 16.2h10M7.4 18.9h10M12.4 14.9v5.1" stroke="#fff" stroke-width="1.3" stroke-linecap="round" opacity=".85"/></svg>',
+           title: 'PROCV / Buscar',   desc: 'Traz colunas de outra aba pela chave — exata ou aproximada' },
+  sort:   { icon: '↕️', title: 'Ordenar', desc: 'Ordena por uma coluna (crescente ou decrescente)' },
+  dedupe: { icon: '🧹', title: 'Remover duplicados', desc: 'Remove linhas repetidas pela chave escolhida' },
+  cols:   { icon: '🧾', title: 'Escolher colunas', desc: 'Mantém somente as colunas selecionadas' },
+  calc:   { icon: '🧮', title: 'Coluna calculada', desc: 'Cria coluna com fórmula simples (+ - * / ou texto)' },
+  join:   { icon: '🔗', title: 'Juntar planilhas', desc: 'Empilha linhas de uma ou mais abas ao final, unindo colunas pelo nome' }
+};
+
+const OPERATORS = [
+  { v: 'eq', t: '= igual a' },
+  { v: 'ne', t: '≠ diferente de' },
+  { v: 'contains', t: 'contém' },
+  { v: 'ncontains', t: 'não contém' },
+  { v: 'starts', t: 'começa com' },
+  { v: 'gt', t: '> maior que' },
+  { v: 'lt', t: '< menor que' },
+  { v: 'gte', t: '≥ maior ou igual' },
+  { v: 'lte', t: '≤ menor ou igual' },
+  { v: 'empty', t: 'está vazio' },
+  { v: 'nempty', t: 'não está vazio' },
+  { v: 'between', t: 'entre (a e b)' }
+];
+
+function $(id) { return document.getElementById(id); }
+
+function toast(msg, isError) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 3500);
+}
+
+function closeModal(id) { $(id).classList.remove('open'); }
+
+function sheetById(id) { return state.sheets.find(s => s.id === id); }
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+// ---------- Leitura de planilhas (com detecção de cabeçalho) ----------
+function isNumericLike(v) {
+  if (typeof v === 'number' && !isNaN(v)) return true;
+  const s = String(v).trim();
+  if (!s) return false;
+  if (/^-?\d+(\.\d+)*$/.test(s)) return true;
+  if (/^-?\d{1,3}(\.\d{3})*(,\d+)?%?$/.test(s)) return true;
+  if (/^[R$]\s*-?\d[\d.,]*$/.test(s)) return true;
+  return false;
+}
+
+function detectHeader(arr) {
+  if (!arr.length) return true;
+  const first = (arr[0] || []).filter(v => String(v).trim() !== '');
+  if (!first.length) return true;
+  const num = first.filter(isNumericLike).length;
+  return (first.length - num) / first.length > 0.5;
+}
+
+function parseSheet(ws, hasHeader) {
+  if (hasHeader) {
+    const json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+    if (!json.length) return null;
+    return { columns: Object.keys(json[0]), rows: json };
+  }
+  const arr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+  if (!arr.length) return null;
+  const width = arr.reduce((m, r) => Math.max(m, r.length), 0);
+  const columns = Array.from({ length: width }, (_, i) => 'Coluna' + (i + 1));
+  const rows = arr.map(row => {
+    const o = {};
+    columns.forEach((c, i) => o[c] = row[i] == null ? '' : row[i]);
+    return o;
+  });
+  return { columns, rows };
+}
+
+function reparseSheet(s) {
+  try {
+    const wb = XLSX.read(s.buffer, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[s.name];
+    const parsed = parseSheet(ws, s.hasHeader);
+    if (!parsed) return;
+    s.columns = parsed.columns;
+    s.rows = parsed.rows;
+    s.rowCount = s.rows.length;
+  } catch (err) {
+    toast('Erro ao reler ' + s.name + ': ' + err.message, true);
+  }
+}
+
+$('fileInput').addEventListener('change', async (e) => {
+  for (const file of e.target.files) {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      for (const name of wb.SheetNames) {
+        const ws = wb.Sheets[name];
+        const arr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+        if (!arr.length) continue;
+        const hasHeader = detectHeader(arr);
+        const parsed = parseSheet(ws, hasHeader);
+        if (!parsed) continue;
+        state.sheets.push({
+          id: 's' + Date.now() + Math.random().toString(36).slice(2, 7),
+          file: file.name,
+          name,
+          buffer: buf,
+          hasHeader: hasHeader,
+          columns: parsed.columns,
+          rows: parsed.rows,
+          rowCount: parsed.rows.length
+        });
+        if (state.sheets.length === 1 || !state.baseSheetId) state.baseSheetId = state.sheets[0].id;
+      }
+      toast('✔ ' + file.name + ' carregada');
+    } catch (err) {
+      toast('Erro ao ler ' + file.name + ': ' + err.message, true);
+    }
+  }
+  renderFiles();
+  renderResult();
+  e.target.value = '';
+});
+
+function renderFiles() {
+  const el = $('fileList');
+  $('sheetCount').textContent = state.sheets.length;
+  if (!state.sheets.length) {
+    el.innerHTML = '<div class="pipeline-empty">Nenhuma planilha aberta ainda.</div>';
+    return;
+  }
+  el.innerHTML = state.sheets.map(s => `
+    <div class="file-item ${s.id === state.baseSheetId ? 'active' : ''}" onclick="setBase('${s.id}')">
+      <span class="icon">📄</span>
+      <span class="name" title="${esc(s.file)} :: ${esc(s.name)}">${esc(s.name)}<br><span style="font-size:10px;color:var(--muted)">${esc(s.file)}</span></span>
+      <span class="badge cbtn" title="Clique para alternar: usar a primeira linha como cabeçalho?" onclick="event.stopPropagation();toggleHeader('${s.id}')">${s.hasHeader ? 'cabeçalho ✓' : 'sem cab.'}</span>
+      <span class="badge">${s.rowCount} ln</span>
+      <span class="rm" title="Remover" onclick="event.stopPropagation();removeSheet('${s.id}')">✕</span>
+    </div>`).join('');
+}
+
+function setBase(id) {
+  state.baseSheetId = id;
+  renderFiles();
+  toast('Aba base definida: ' + sheetById(id).name);
+}
+
+function toggleHeader(id) {
+  const s = sheetById(id);
+  if (!s) return;
+  s.hasHeader = !s.hasHeader;
+  reparseSheet(s);
+  renderFiles();
+  if (state.baseSheetId === id) renderResult();
+  toast('Releitura: primeira linha é ' + (s.hasHeader ? 'cabeçalho' : 'dado (geradas colunas nomeadas)'));
+}
+
+function removeSheet(id) {
+  state.sheets = state.sheets.filter(s => s.id !== id);
+  if (state.baseSheetId === id) state.baseSheetId = state.sheets[0] ? state.sheets[0].id : null;
+  renderFiles();
+}
+
+// ---------- Modal de passos ----------
+function openStepModal() {
+  if (!state.sheets.length) { toast('Abra ao menos uma planilha primeiro.', true); return; }
+  if (!state.baseSheetId) state.baseSheetId = state.sheets[0].id;
+  state.selectedType = 'filter';
+  renderTypeGrid();
+  renderStepForm();
+  $('stepModal').classList.add('open');
+}
+
+function renderTypeGrid() {
+  $('typeGrid').innerHTML = Object.entries(STEP_TYPES).map(([k, v]) => `
+    <div class="type-card ${state.selectedType === k ? 'selected' : ''}" onclick="selectType('${k}')">
+      <div class="t">${v.icon} ${v.title}</div>
+      <div class="d">${v.desc}</div>
+    </div>`).join('');
+}
+
+function selectType(k) { state.selectedType = k; renderTypeGrid(); renderStepForm(); }
+
+function sheetOptions(sel, extraLabel) {
+  let h = extraLabel ? `<option value="">${esc(extraLabel)}</option>` : '';
+  h += state.sheets.map(s =>
+    `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${esc(s.file)} :: ${esc(s.name)}</option>`).join('');
+  return h;
+}
+
+function colOptions(cols, sel) {
+  return cols.map(c => `<option value="${esc(c)}" ${sel === c ? 'selected' : ''}>${esc(c)}</option>`).join('');
+}
+
+function renderStepForm() {
+  const t = state.selectedType;
+  const base = sheetById(state.baseSheetId) || state.sheets[0];
+  const baseCols = base ? base.columns : [];
+  let h = '';
+
+  if (t === 'filter') {
+    if (!state.editConds.length) state.editConds = [newCond(baseCols)];
+    h = `
+      <div class="form-row">
+        <div class="form-group" style="max-width:280px">
+          <label>Combinar as condições</label>
+          <select id="f_logic" onchange="state.editLogic=this.value">
+            <option value="E" ${state.editLogic === 'E' ? 'selected' : ''}>Todas as condições (E / AND)</option>
+            <option value="OU" ${state.editLogic === 'OU' ? 'selected' : ''}>Qualquer condição (OU / OR)</option>
+          </select>
+        </div>
+      </div>
+      <div id="f_conds"></div>
+      <div class="hint">Você pode comparar com um valor fixo ou com outra coluna. Ex.: "valor_pago &lt; valor_esperado".</div>
+      <div class="hint">Use o filtro rápido (barra superior) para filtros temporários na visualização.</div>`;
+  }
+
+  if (t === 'procv') {
+    h = `
+      <div class="form-row">
+        <div class="form-group">
+          <label>Aba de consulta (onde buscar)</label>
+          <select id="p_sheet" onchange="renderLookupCols()">${sheetOptions('', 'Escolha…')}</select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="min-width:150px">
+          <label>Chave no resultado atual</label>
+          <select id="p_key">${colOptions(baseCols)}</select>
+        </div>
+        <div class="form-group" style="min-width:150px">
+          <label>Chave na aba de consulta</label>
+          <select id="p_lkey" onchange="renderReturnCols()"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Colunas para trazer</label>
+          <div class="cols-list" id="p_ret"></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="min-width:150px">
+          <label>Prefixo no nome da coluna (opcional)</label>
+          <input type="text" id="p_prefix" placeholder="ex.: Cliente_">
+        </div>
+      </div>
+      <label class="checkline"><input type="checkbox" id="p_approx"> PROCV aproximado (se a chave for numérica, pega o valor mais próximo; senão exato)</label>
+      <label class="checkline"><input type="checkbox" id="p_onlymatch"> Manter só as linhas que encontraram correspondência (padrão Excel: mantém todas)</label>
+      <div class="hint">Funciona como PROCV: busca a 1ª ocorrência exata da chave. Não achado = #N/D (ou 'vazio', se a coluna consultada estiver vazia).</div>`;
+  }
+
+  if (t === 'sort') {
+    h = `
+      <div class="form-row">
+        <div class="form-group"><label>Coluna</label><select id="s_col">${colOptions(baseCols)}</select></div>
+        <div class="form-group"><label>Direção</label>
+          <select id="s_dir"><option value="asc">Crescente (A→Z / 0→9)</option><option value="desc">Decrescente (Z→A / 9→0)</option></select>
+        </div>
+      </div>`;
+  }
+
+  if (t === 'dedupe') {
+    h = `
+      <div class="form-row">
+        <div class="form-group"><label>Coluna chave (para detectar duplicados)</label><select id="d_col">${colOptions(baseCols)}</select></div>
+      </div>
+      <div class="hint">Mantém apenas a primeira ocorrência de cada valor.</div>`;
+  }
+
+  if (t === 'cols') {
+    h = `
+      <div class="form-row">
+        <div class="form-group">
+          <label>Colunas a manter</label>
+          <div class="cols-list" id="c_list">${baseCols.map(c => `<label><input type="checkbox" value="${esc(c)}" checked> ${esc(c)}</label>`).join('')}</div>
+        </div>
+      </div>`;
+  }
+
+  if (t === 'calc') {
+    h = `
+      <div class="form-row">
+        <div class="form-group"><label>Nome da nova coluna</label><input type="text" id="k_name" placeholder="ex.: Total"></div>
+        <div class="form-group"><label>Coluna 1</label><select id="k_col1">${colOptions(baseCols)}</select></div>
+        <div class="form-group"><label>Operador</label>
+          <select id="k_op">
+            <option value="+">+ (somar)</option>
+            <option value="-">- (subtrair)</option>
+            <option value="*">× (multiplicar)</option>
+            <option value="/">÷ (dividir)</option>
+            <option value="concat">| juntar texto</option>
+            <option value="upper">MAIÚSCULAS</option>
+            <option value="lower">minúsculas</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Coluna 2 / valor (se aplicável)</label><select id="k_col2">${colOptions(baseCols)}</select></div>
+      </div>
+      <div class="hint">Use separador decimal com ponto ou vírgula (ele converte automaticamente). Ex.: preço * quantidade</div>`;
+  }
+
+  if (t === 'join') {
+    const others = state.sheets.filter(s => s.id !== state.baseSheetId);
+    h = `
+      <div class="form-row">
+        <div class="form-group">
+          <label>Abas para acrescentar (pode marcar várias)</label>
+          <div class="cols-list" id="j_sheets">
+            ${others.length ? others.map(s => `<label><input type="checkbox" value="${s.id}"> ${esc(s.file)} :: ${esc(s.name)} <span class="badge">${s.rowCount} ln</span></label>`).join('')
+          : '<div class="hint">Abra outra planilha para poder juntar aqui (o arquivo atual é a base).</div>'}
+          </div>
+        </div>
+      </div>
+      <label class="checkline"><input type="checkbox" id="j_src"> Adicionar coluna <b>"origem"</b> dizendo a aba de cada linha</label>
+      <div class="hint">Colunas de mesmo nome viram a mesma coluna; colunas exclusivas de uma aba são preenchidas com vazio nas outras. As linhas vão para o final.</div>`;
+  }
+
+  $('stepForm').innerHTML = h;
+  if (t === 'filter') renderFilterConds();
+  if (t === 'procv') renderLookupCols();
+}
+
+// ---------- Construção de condições (filtro múltiplo) ----------
+function newCond(cols) {
+  return { col: cols[0] || '', op: 'eq', src: 'fixo', val: '', col2: cols[0] || '', val2: '' };
+}
+
+function renderFilterConds() {
+  const el = $('f_conds');
+  if (!el) return;
+  const base = sheetById(state.baseSheetId) || state.sheets[0];
+  const cols = base ? base.columns : [];
+  el.innerHTML = state.editConds.map((c, i) => `
+    <div class="form-row frow">
+      <div class="form-group" style="flex:1.2"><label>Coluna ${i + 1}</label>
+        <select onchange="updCond(${i},'col',this.value)">${colOptions(cols, c.col)}</select>
+      </div>
+      <div class="form-group"><label>Condição</label>
+        <select onchange="updCond(${i},'op',this.value)">${OPERATORS.map(o =>
+          `<option value="${o.v}" ${o.v === c.op ? 'selected' : ''} ${o.v === 'between' && c.src === 'coluna' ? 'disabled' : ''}>${o.t}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Tipo</label>
+        <select onchange="updCond(${i},'src',this.value)">
+          <option value="fixo" ${c.src === 'fixo' ? 'selected' : ''}>Valor fixo</option>
+          <option value="coluna" ${c.src === 'coluna' ? 'selected' : ''}>Outra coluna</option>
+        </select>
+      </div>
+      ${c.src === 'coluna'
+        ? `<div class="form-group" style="flex:1.2"><label>Comparar com a coluna</label>
+            <select onchange="state.editConds[${i}].col2=this.value">${colOptions(cols, c.col2)}</select></div>`
+        : `<div class="form-group" style="flex:1.2"><label>Valor</label>
+            <input type="text" value="${esc(c.val)}" placeholder="valor" oninput="state.editConds[${i}].val=this.value"></div>`}
+      ${c.op === 'between' && c.src === 'fixo'
+        ? `<div class="form-group" style="flex:1"><label>Valor final (entre)</label>
+            <input type="text" value="${esc(c.val2)}" oninput="state.editConds[${i}].val2=this.value"></div>`
+        : ''}
+      ${state.editConds.length > 1
+        ? `<div class="form-group rm-cond"><button class="btn red small" onclick="removeCond(${i})">✕</button></div>`
+        : ''}
+    </div>`).join('') +
+    `<button class="btn-add-cond" onclick="addCond()">＋ Adicionar condição</button>`;
+}
+
+function updCond(i, f, v) {
+  state.editConds[i][f] = v;
+  if (f === 'src' && v === 'coluna' && state.editConds[i].op === 'between') state.editConds[i].op = 'eq';
+  if (f === 'src' || f === 'op') renderFilterConds();
+}
+
+function addCond() {
+  const base = sheetById(state.baseSheetId) || state.sheets[0];
+  state.editConds.push(newCond(base ? base.columns : []));
+  renderFilterConds();
+}
+
+function removeCond(i) {
+  state.editConds.splice(i, 1);
+  renderFilterConds();
+}
+
+// ---------- PROCV (colunas de retorno) ----------
+function renderLookupCols() {
+  const sh = sheetById($('p_sheet').value);
+  const lk = $('p_lkey');
+  const ret = $('p_ret');
+  if (!sh) { lk.innerHTML = ''; ret.innerHTML = ''; return; }
+  lk.innerHTML = colOptions(sh.columns);
+  ret.innerHTML = sh.columns.map(c => `<label><input type="checkbox" value="${esc(c)}" checked> ${esc(c)}</label>`).join('');
+}
+
+function renderReturnCols() {}
+
+// ---------- Pipeline ----------
+function addStep() {
+  const t = state.selectedType;
+  const step = { type: t };
+  const base = sheetById(state.baseSheetId) || state.sheets[0];
+
+  if (t === 'filter') {
+    const conds = state.editConds
+      .map(c => ({ col: c.col, op: c.op, src: c.src, val: c.val, col2: c.col2, val2: c.val2 }))
+      .filter(c => c.col && (
+        ['empty', 'nempty'].includes(c.op) ||
+        (c.src === 'coluna' && c.col2) ||
+        (c.op === 'between' ? String(c.val).trim() !== '' && String(c.val2).trim() !== ''
+                            : String(c.val).trim() !== '')
+      ));
+    if (!conds.length) { toast('Preencha ao menos uma condição válida.', true); return; }
+    step.logic = $('f_logic').value;
+    step.conds = conds;
+  }
+
+  if (t === 'procv') {
+    step.sheetId = $('p_sheet').value;
+    step.key = $('p_key').value;
+    step.lkey = $('p_lkey').value;
+    step.prefix = $('p_prefix').value;
+    step.approx = $('p_approx').checked;
+    step.onlymatch = $('p_onlymatch').checked;
+    step.ret = [...$('p_ret').querySelectorAll('input:checked')].map(i => i.value);
+    if (!step.sheetId) { toast('Escolha a aba de consulta.', true); return; }
+    if (!step.ret.length) { toast('Marque ao menos 1 coluna para trazer.', true); return; }
+    if (!step.lkey) { toast('Escolha a chave na aba de consulta.', true); return; }
+  }
+
+  if (t === 'sort') { step.col = $('s_col').value; step.dir = $('s_dir').value; }
+  if (t === 'dedupe') { step.col = $('d_col').value; }
+  if (t === 'cols') {
+    step.cols = [...$('c_list').querySelectorAll('input:checked')].map(i => i.value);
+    if (!step.cols.length) { toast('Marque ao menos 1 coluna.', true); return; }
+  }
+  if (t === 'calc') {
+    step.name = $('k_name').value.trim();
+    step.col1 = $('k_col1').value;
+    step.op = $('k_op').value;
+    step.col2 = $('k_col2').value;
+    if (!step.name) { toast('Dê um nome à nova coluna.', true); return; }
+  }
+  if (t === 'join') {
+    step.sheetIds = [...$('j_sheets').querySelectorAll('input:checked')].map(i => i.value);
+    step.src = $('j_src').checked;
+    if (!step.sheetIds.length) { toast('Marque ao menos 1 aba para juntar.', true); return; }
+  }
+
+  state.steps.push(step);
+  renderSteps();
+  closeModal('stepModal');
+  toast('Passo adicionado. Clique em Executar.');
+}
+
+function opText(v) {
+  const o = OPERATORS.find(x => x.v === v);
+  return o ? o.t : v;
+}
+
+function condText(c) {
+  if (c.op === 'between') return `${c.col} entre "${c.val}" e "${c.val2}"`;
+  const v = c.src === 'coluna' ? `coluna "${c.col2}"` : `"${c.val}"`;
+  return `${c.col} ${opText(c.op)} ${v}`;
+}
+
+function stepDescription(s) {
+  switch (s.type) {
+    case 'filter': {
+      const conds = s.conds || legacyConds(s).conds;
+      const logic = (s.conds ? (s.logic || 'E') : 'E');
+      return 'Filtrar (' + logic + '): ' + conds.map(condText).join(logic === 'OU' ? '  OU  ' : '  E  ');
+    }
+    case 'procv': {
+      const sh = sheetById(s.sheetId);
+      return `PROCV: chave "${s.key}" → ${sh ? sh.name : '?'} (${s.lkey}) trazendo [${s.ret.join(', ')}]` +
+        (s.approx ? ' · modo aproximado' : '') +
+        (s.onlymatch ? ' · só correspondências' : '');
+    }
+    case 'sort': return `Ordenar por ${s.col} ${s.dir === 'asc' ? '↑' : '↓'}`;
+    case 'dedupe': return `Remover duplicados pela coluna ${s.col}`;
+    case 'cols': return `Manter apenas: ${s.cols.join(', ')}`;
+    case 'calc': return `Nova coluna "${s.name}" = ${s.col1} ${s.op} ${s.col2}`;
+    case 'join': {
+      const ids = (s.sheetIds && s.sheetIds.length) ? s.sheetIds : (s.sheetId ? [s.sheetId] : []);
+      const names = ids.map(id => { const sh = sheetById(id); return sh ? sh.name : '?'; });
+      return `Acrescentar linhas de: ${names.join(', ')}` + (s.src ? ' · com coluna origem' : '');
+    }
+    default: return '';
+  }
+}
+
+function renderSteps() {
+  const el = $('stepList');
+  if (!state.steps.length) {
+    el.innerHTML = '<div class="pipeline-empty">Clique em "Novo passo" para criar seu processo.</div>';
+    return;
+  }
+  el.innerHTML = state.steps.map((s, i) => `
+    <div class="step">
+      <div class="step-head">
+        <span class="step-num">${i + 1}</span>
+        <span class="step-type">${STEP_TYPES[s.type].icon} ${STEP_TYPES[s.type].title}</span>
+      </div>
+      <div class="step-desc">${esc(stepDescription(s))}</div>
+      <div class="actions">
+        <button title="Mover para cima" onclick="moveStep(${i},-1)">↑</button>
+        <button title="Mover para baixo" onclick="moveStep(${i},1)">↓</button>
+        <button title="Excluir" onclick="removeStep(${i})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function removeStep(i) { state.steps.splice(i, 1); renderSteps(); }
+function moveStep(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= state.steps.length) return;
+  [state.steps[i], state.steps[j]] = [state.steps[j], state.steps[i]];
+  renderSteps();
+}
+function clearPipeline() { state.steps = []; renderSteps(); toast('Processo limpo.'); }
+
+// ---------- Execução ----------
+function toNum(v) {
+  if (v === null || v === undefined) return NaN;
+  const s = String(v).trim().replace(/\s/g, '').replace(/R\$|US\$/gi, '');
+  if (!s) return NaN;
+  const n = parseFloat(s.replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'));
+  return isNaN(n) ? parseFloat(s) : n;
+}
+
+function norm(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
+
+function matchVal(raw, op, val, val2) {
+  switch (op) {
+    case 'empty': return raw === '' || raw == null;
+    case 'nempty': return !(raw === '' || raw == null);
+    case 'eq': return norm(raw) === norm(val);
+    case 'ne': return norm(raw) !== norm(val);
+    case 'contains': return norm(raw).includes(norm(val));
+    case 'ncontains': return !norm(raw).includes(norm(val));
+    case 'starts': return norm(raw).startsWith(norm(val));
+    case 'gt': return toNum(raw) > toNum(val);
+    case 'lt': return toNum(raw) < toNum(val);
+    case 'gte': return toNum(raw) >= toNum(val);
+    case 'lte': return toNum(raw) <= toNum(val);
+    case 'between': { const n = toNum(raw); return n >= toNum(val) && n <= toNum(val2); }
+    default: return true;
+  }
+}
+
+function getCondValue(r, c) {
+  return c.src === 'coluna' ? (r[c.col2] == null ? '' : r[c.col2]) : c.val;
+}
+
+function evalCond(r, c) {
+  if (c.op === 'between') {
+    const n = toNum(r[c.col]);
+    return n >= toNum(c.val) && n <= toNum(c.val2);
+  }
+  return matchVal(r[c.col], c.op, getCondValue(r, c), c.val2 || '');
+}
+
+function legacyConds(s) {
+  const conds = [{ col: s.col, op: s.op, src: 'fixo', val: s.val || '', val2: s.val2 || '', col2: '' }];
+  if (s.and) conds.push({ col: s.and.col, op: s.and.op, src: 'fixo', val: s.and.val || '', val2: '', col2: '' });
+  return { conds: conds, logic: 'E' };
+}
+
+function buildLookup(sheet, lkey) {
+  const map = new Map();
+  for (const r of sheet.rows) {
+    const k = norm(r[lkey]);
+    if (k !== '' && !map.has(k)) map.set(k, r);
+  }
+  return map;
+}
+
+function runPipeline() {
+  const base = sheetById(state.baseSheetId) || state.sheets[0];
+  if (!base) { toast('Abra uma planilha e clique nela para definir a base.', true); return; }
+
+  let data = base.rows.map(r => Object.assign({}, r));
+  let cols = base.columns.slice();
+  const totalRows = data.length;
+
+  try {
+    for (const s of state.steps) {
+      if (s.type === 'filter') {
+        const f = s.conds && s.conds.length ? s.conds : legacyConds(s).conds;
+        const logic = s.conds && s.conds.length ? (s.logic || 'E') : 'E';
+        data = data.filter(r =>
+          logic === 'OU' ? f.some(c => evalCond(r, c)) : f.every(c => evalCond(r, c))
+        );
+      }
+
+      if (s.type === 'procv') {
+        const sh = sheetById(s.sheetId);
+        if (!sh) throw new Error('Aba de consulta do passo PROCV não encontrada.');
+        const map = buildLookup(sh, s.lkey);
+        const wasApprox = s.approx;
+        function lookupKey(val) {
+          if (wasApprox) {
+            const nv = toNum(val);
+            if (!isNaN(nv) && String(val == null ? '' : val).trim() !== '') {
+              let best = null, bd = Infinity;
+              for (const r of sh.rows) {
+                const rn = toNum(r[s.lkey]);
+                if (!isNaN(rn)) {
+                  const d = Math.abs(rn - nv);
+                  if (d < bd) { bd = d; best = r; }
+                }
+              }
+              if (best) return best;
+            }
+          }
+          return map.get(norm(val)) || null;
+        }
+        for (const c of s.ret) {
+          const name = (s.prefix || '') + c;
+          if (!cols.includes(name)) cols.push(name);
+        }
+        for (const r of data) {
+          const found = lookupKey(r[s.key]);
+          for (const c of s.ret) {
+            const name = (s.prefix || '') + c;
+            r[name] = found ? (found[c] == null ? '' : found[c]) : '#N/D';
+          }
+        }
+        if (s.onlymatch) {
+          data = data.filter(r => {
+            const f = lookupKey(r[s.key]);
+            return f ? true : false;
+          });
+        }
+      }
+
+      if (s.type === 'sort') {
+        const sample = data.slice(0, 30).every(r => !isNaN(toNum(r[s.col])) && String(r[s.col] == null ? '' : r[s.col]) !== '');
+        data.sort((a, b) => {
+          let va = a[s.col], vb = b[s.col];
+          if (sample) { va = toNum(va) || 0; vb = toNum(vb) || 0; }
+          else { va = norm(va); vb = norm(vb); }
+          if (va < vb) return s.dir === 'asc' ? -1 : 1;
+          if (va > vb) return s.dir === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+
+      if (s.type === 'dedupe') {
+        const seen = new Set();
+        data = data.filter(r => {
+          const k = norm(r[s.col]);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+      }
+
+      if (s.type === 'cols') {
+        cols = cols.filter(c => s.cols.includes(c));
+        data = data.map(r => {
+          const o = {};
+          for (const c of cols) o[c] = (r[c] == null ? '' : r[c]);
+          return o;
+        });
+      }
+
+      if (s.type === 'calc') {
+        if (!cols.includes(s.name)) cols.push(s.name);
+        data = data.map(r => {
+          let v;
+          if (s.op === 'upper') v = String(r[s.col1] == null ? '' : r[s.col1]).toUpperCase();
+          else if (s.op === 'lower') v = String(r[s.col1] == null ? '' : r[s.col1]).toLowerCase();
+          else if (s.op === 'concat') v = String(r[s.col1] == null ? '' : r[s.col1]) + String(r[s.col2] == null ? '' : r[s.col2]);
+          else {
+            const a = toNum(r[s.col1]) || 0;
+            const bText = r[s.col2] != null ? String(r[s.col2]) : (s.col2 || '');
+            const b = toNum(bText);
+            const bn = isNaN(b) ? a : b;
+            if (s.op === '+') v = a + bn;
+            else if (s.op === '-') v = a - bn;
+            else if (s.op === '*') v = a * bn;
+            else if (s.op === '/') v = bn === 0 ? '' : a / bn;
+          }
+          const out = Object.assign({}, r);
+          out[s.name] = v;
+          return out;
+        });
+      }
+
+      if (s.type === 'join') {
+        const ids = (s.sheetIds && s.sheetIds.length) ? s.sheetIds : (s.sheetId ? [s.sheetId] : []);
+        if (!ids.length) throw new Error('Nenhuma aba selecionada para juntar.');
+        const joined = [];
+        let allCols = [...cols];
+        for (const id of ids) {
+          const sh = sheetById(id);
+          if (!sh) throw new Error('Aba para juntar não encontrada (ela foi removida?).');
+          joined.push(sh);
+          allCols = [...new Set(allCols.concat(sh.columns))];
+        }
+        if (s.src && !allCols.includes('origem')) allCols.push('origem');
+        const fill = (r, srcName) => {
+          const o = {};
+          for (const c of allCols) o[c] = (r[c] == null ? '' : r[c]);
+          if (s.src) o.origem = srcName;
+          return o;
+        };
+        const baseSh = sheetById(state.baseSheetId);
+        data = data.map(r => fill(r, baseSh ? baseSh.name : ''));
+        for (const sh of joined) for (const r of sh.rows) data.push(fill(r, sh.name));
+        cols = allCols;
+      }
+    }
+  } catch (err) {
+    toast('Erro durante a execução: ' + err.message, true);
+    return;
+  }
+
+  state.result = data;
+  state.resultCols = cols;
+  renderResult();
+  toast(`✔ Processo executado: ${data.length} de ${totalRows} linhas, ${cols.length} colunas.`);
+}
+
+function renderResult() {
+  const wrap = $('tableWrap');
+  const rows = state.result;
+  if (!rows) {
+    wrap.innerHTML = `<div class="empty"><div class="big">📊</div><div>Abra planilhas, monte os passos do processo e clique em <b>Executar</b>.</div></div>`;
+    return;
+  }
+
+  const q = norm($('quickFilter').value);
+  const shown = q ? rows.filter(r => state.resultCols.some(c => norm(r[c]).includes(q))) : rows;
+  const LIMIT = 300;
+  const slice = shown.slice(0, LIMIT);
+
+  $('statusInfo').innerHTML =
+    `Resultado: <b>${rows.length}</b> linhas` +
+    (q ? ` (filtro rápido: <b>${shown.length}</b>)` : '') +
+    ` · <b>${state.resultCols.length}</b> colunas` +
+    (shown.length > LIMIT ? ` · exibindo primeiras ${LIMIT}` : '');
+
+  if (!slice.length) {
+    wrap.innerHTML = '<div class="empty"><div class="big">📭</div><div>Nenhuma linha no resultado.</div></div>';
+    return;
+  }
+
+  wrap.innerHTML = `<table><thead><tr>${state.resultCols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+    <tbody>${slice.map(r => `<tr>${state.resultCols.map(c => {
+      const v = r[c] == null ? '' : r[c];
+      return `<td title="${esc(v)}">${esc(v)}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+// ---------- Estatísticas ----------
+function fmtNum(n, dec) {
+  if (!isFinite(n)) return '—';
+  return n.toLocaleString('pt-BR', { maximumFractionDigits: dec == null ? 2 : dec });
+}
+
+function openStats() {
+  if (!state.result || !state.result.length) { toast('Execute o processo primeiro para ver estatísticas.', true); return; }
+  const rows = state.result;
+  const lines = state.resultCols.map(c => {
+    const vals = rows.map(r => r[c]);
+    const filled = vals.filter(v => String(v).trim() !== '' && String(v) !== '#N/D');
+    const empty = vals.length - filled.length;
+    const uniq = new Set(filled.map(norm)).size;
+    const numVals = filled.map(toNum).filter(v => !isNaN(v));
+    const numeric = (filled.length && numVals.length / filled.length > 0.7);
+    if (numeric) {
+      const sum = numVals.reduce((a, b) => a + b, 0);
+      const avg = sum / numVals.length;
+      const mn = numVals.reduce((a, b) => Math.min(a, b), Infinity);
+      const mx = numVals.reduce((a, b) => Math.max(a, b), -Infinity);
+      return `<tr><td>${esc(c)}</td><td>numérico</td><td>${filled.length}</td><td>${empty}</td><td>${uniq}</td>
+        <td>${fmtNum(sum)}</td><td>${fmtNum(avg)}</td><td>${fmtNum(mn)}</td><td>${fmtNum(mx)}</td></tr>`;
+    }
+    const freq = {};
+    const orig = {};
+    filled.forEach(v => { const k = norm(v); if (k) { freq[k] = (freq[k] || 0) + 1; if (!orig[k]) orig[k] = v; } });
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+    return `<tr><td>${esc(c)}</td><td>texto</td><td>${filled.length}</td><td>${empty}</td><td>${uniq}</td>
+      <td colspan="4" style="color:var(--muted)">mais comum: ${top ? `"${esc(orig[top[0]])}" (${top[1]}×)` : '—'}</td></tr>`;
+  }).join('');
+
+  $('statsBody').innerHTML =
+    `<table><thead><tr><th>Coluna</th><th>Tipo</th><th>Preenchidas</th><th>Vazias</th><th>Únicas</th><th>Soma</th><th>Média</th><th>Mín</th><th>Máx</th></tr></thead><tbody>${lines}</tbody></table>`;
+  $('statsModal').classList.add('open');
+}
+
+// ---------- Exportação ----------
+function exportResult(fmt) {
+  if (!state.result) { toast('Execute o processo antes de exportar.', true); return; }
+  const rows = state.result.map(r => {
+    const o = {};
+    for (const c of state.resultCols) o[c] = (r[c] == null ? '' : r[c]);
+    return o;
+  });
+  const ws = XLSX.utils.json_to_sheet(rows, { header: state.resultCols });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Resultado');
+  const name = 'resultado_processo.' + fmt;
+  const out = XLSX.write(wb, { bookType: fmt, type: 'array' });
+  const mime = fmt === 'csv'
+    ? 'text/csv;charset=utf-8'
+    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const blob = new Blob([out], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { window.open(url, '_blank'); }, 400);
+  setTimeout(() => URL.revokeObjectURL(url), 6000);
+  toast('⬇ Baixando ' + name);
+}
+
+// ---------- Processos nomeados (localStorage) ----------
+function getProcesses() { return getStoredProcs(); }
+
+function saveProcesses(list) {
+  saveStoredProcs(list);
+  if (HAS_GS) {
+    google.script.run.withSuccessHandler(function() {}).saveProcessList(JSON.stringify(list));
+  }
+}
+
+function loadProcsFromServer() {
+  if (!HAS_GS) return;
+  google.script.run
+    .withSuccessHandler(function(jsonList) {
+      try {
+        const srv = JSON.parse(jsonList || '[]');
+        if (Array.isArray(srv) && srv.length) {
+          saveStoredProcs(srv);
+          renderProcessList();
+          renderSaveList();
+        }
+      } catch (e) {}
+    })
+    .listProcesses();
+}
+
+function getStoredProcs() {
+  try { return JSON.parse(localStorage.getItem(KEY_PROCS) || '[]'); }
+  catch (e) { return []; }
+}
+
+function saveStoredProcs(list) {
+  try { localStorage.setItem(KEY_PROCS, JSON.stringify(list)); }
+  catch (e) {}
+}
+
+const HAS_GS = (typeof google !== 'undefined' && google.script && google.script.run) ? true : false;
+
+function serializeSteps() {
+  return state.steps.map(s => {
+    const o = Object.assign({}, s);
+    if (s.sheetId) {
+      const sh = sheetById(s.sheetId);
+      o._arquivo = (sh || {}).file || null;
+      o._aba = (sh || {}).name || null;
+      o.sheetId = null;
+    }
+    return o;
+  });
+}
+
+function resolveSteps(passos) {
+  const missing = [];
+  const steps = (passos || []).map(s => {
+    const o = Object.assign({}, s);
+    if (s._arquivo !== undefined) {
+      const sh = state.sheets.find(x => x.file === s._arquivo && x.name === s._aba);
+      o.sheetId = sh ? sh.id : null;
+      delete o._arquivo;
+      delete o._aba;
+    }
+    if ((o.type === 'procv' || o.type === 'join') && !o.sheetId) {
+      missing.push(o.type === 'procv' ? 'PROCV' : 'Juntar abas');
+      return null;
+    }
+    return o;
+  }).filter(Boolean);
+  return { steps: steps.filter(Boolean), missing: missing };
+}
+
+function renderProcessList() {
+  const list = getProcesses();
+  const el = $('processList');
+  if (!list.length) {
+    el.innerHTML = '<div class="pipeline-empty">Nenhum processo salvo ainda.</div>';
+    return;
+  }
+  el.innerHTML = list.map((p, i) => `
+    <div class="proc">
+      <div class="nm" title="Carregar" onclick="loadNamed('${esc(p.nome)}')">
+        ${esc(p.nome)}
+        <div class="meta">${p.passos ? p.passos.length : 0} passos · ${p.baseAba || ''}</div>
+      </div>
+      <div class="act">
+        <button title="Carregar" onclick="loadNamed('${esc(p.nome)}')">▶</button>
+        <button title="Excluir" onclick="deleteNamed('${esc(p.nome)}')">🗑</button>
+      </div>
+    </div>`).join('');
+}
+
+function renderSaveList() {
+  const list = getProcesses();
+  const el = $('saveList');
+  if (!list.length) { el.innerHTML = '<div class="pipeline-empty">Nenhum processo salvo ainda.</div>'; return; }
+  el.innerHTML = list.map(p => `
+    <div class="proc" style="margin:6px 0">
+      <div class="nm" title="Carregar" onclick="loadNamed('${esc(p.nome)}')">${esc(p.nome)}
+        <div class="meta">${p.passos ? p.passos.length : 0} passos</div>
+      </div>
+      <div class="act">
+        <button title="Carregar" onclick="loadNamed('${esc(p.nome)}')">▶</button>
+        <button title="Excluir" onclick="deleteNamed('${esc(p.nome)}')">🗑</button>
+      </div>
+    </div>`).join('');
+}
+
+function openSaveModal() {
+  renderSaveList();
+  $('saveModal').classList.add('open');
+  setTimeout(() => $('save_name') && $('save_name').focus(), 50);
+}
+
+function saveNamedProcess() {
+  const nome = $('save_name').value.trim();
+  if (!nome) { toast('Dê um nome ao processo.', true); return; }
+  const base = sheetById(state.baseSheetId) || state.sheets[0];
+  const list = getProcesses().filter(p => p.nome !== nome);
+  list.unshift({
+    nome: nome,
+    criado: Date.now(),
+    baseArquivo: (base || {}).file || null,
+    baseAba: (base || {}).name || null,
+    passos: serializeSteps()
+  });
+  saveProcesses(list);
+  renderProcessList();
+  renderSaveList();
+  toast('💾 Processo "' + nome + '" salvo com ' + state.steps.length + ' passos.');
+}
+
+function loadNamed(nome) {
+  const p = getProcesses().find(x => x.nome === nome);
+  if (!p) { toast('Processo não encontrado.', true); return; }
+  const r = resolveSteps(p.passos || []);
+  state.steps = r.steps;
+  if (p.baseArquivo && p.baseAba) {
+    const b = state.sheets.find(s => s.file === p.baseArquivo && s.name === p.baseAba);
+    if (b) state.baseSheetId = b.id;
+  }
+  renderSteps();
+  renderFiles();
+  toast((r.missing.length ? '⚠ Abas não abertas: ' + r.missing.join(', ') + '. Abra os arquivos antes de executar. ' : '') + 'Processo "' + nome + '" carregado.');
+}
+
+let pendingDelete = null;
+function deleteNamed(nome) {
+  if (pendingDelete === nome) {
+    pendingDelete = null;
+    saveProcesses(getProcesses().filter(p => p.nome !== nome));
+    renderProcessList();
+    renderSaveList();
+    toast('Processo "' + nome + '" excluído.');
+  } else {
+    pendingDelete = nome;
+    toast('⚠ Confirme: clique em excluir de "' + nome + '" de novo.');
+    setTimeout(() => { if (pendingDelete === nome) pendingDelete = null; }, 3500);
+  }
+}
+
+$('save_name') && $('save_name').addEventListener('keydown', e => { if (e.key === 'Enter') saveNamedProcess(); });
+
+// ---------- Exportação/importação em arquivo .json ----------
+function saveProcessFile() {
+  if (!state.steps.length) { toast('Não há passos para salvar.', true); return; }
+  const base = sheetById(state.baseSheetId) || state.sheets[0];
+  const data = {
+    versao: 2,
+    baseArquivo: (base || {}).file || null,
+    baseAba: (base || {}).name || null,
+    passos: serializeSteps()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'meu_processo_filtragem.json';
+  a.click();
+  toast('💾 Processo exportado. Abra as mesmas planilhas para recarregar.');
+}
+
+$('loadProcess').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.baseArquivo && data.baseAba) {
+      const b = state.sheets.find(s => s.file === data.baseArquivo && s.name === data.baseAba);
+      if (b) state.baseSheetId = b.id;
+    }
+    const r = resolveSteps(data.passos || []);
+    state.steps = r.steps;
+    renderFiles();
+    renderSteps();
+    toast((r.missing.length ? '⚠ Abas não abertas: ' + r.missing.join(', ') + '. ' : '') + 'Processo carregado. Clique em Executar.');
+  } catch (err) {
+    toast('Erro ao carregar: ' + err.message, true);
+  }
+  e.target.value = '';
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-bg.open').forEach(m => m.classList.remove('open'));
+  if (e.key === 'F5' || (e.ctrlKey && e.key === 'Enter')) { e.preventDefault(); runPipeline(); }
+});
+
+document.querySelectorAll('.modal-bg').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+renderFiles();
+renderSteps();
+renderProcessList();
+loadProcsFromServer();
+
+// PWA:JS:START
+// ---------- PWA (instalação como app) ----------
+(function () {
+  const btn = document.getElementById('btnInstall');
+  const standalone = window.matchMedia('(display-mode: standalone)').matches ||
+                     window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+                     window.navigator.standalone === true;
+
+  let deferred = null;
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferred = e;
+    if (!standalone && btn) btn.style.display = '';
+  });
+
+  window.installApp = async function () {
+    if (deferred) {
+      deferred.prompt();
+      const choice = await deferred.userChoice;
+      deferred = null;
+      if (btn) btn.style.display = 'none';
+      if (choice.outcome === 'accepted') toast('✔ App instalado!');
+    } else if (standalone) {
+      toast('O app já está instalado.');
+    } else {
+      toast('Use o menu do navegador (⋮) → "Instalar app" ou "Adicionar à tela inicial".', true);
+    }
+  };
+
+  window.addEventListener('appinstalled', () => {
+    deferred = null;
+    if (btn) btn.style.display = 'none';
+    toast('✔ Instalado! Agora está disponível como app.');
+  });
+
+  // Atalhos do manifest (botao direito no icone do app).
+  const params = new URLSearchParams(location.search);
+  const acao = params.get('acao');
+  if (acao === 'novo-passo') openStepModal();
+  if (acao === 'abrir') document.getElementById('fileInput').click();
+
+  // Avisa quando ha uma versao nova do app em cache.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      toast('✔ App atualizado para a versão mais recente.');
+    });
+  }
+})();
+// PWA:JS:END
+</script>
+</body>
+</html>
